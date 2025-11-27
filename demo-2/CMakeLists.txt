@@ -7,6 +7,7 @@ find_package(MathGL2 CONFIG REQUIRED)
 # find_package(imgui CONFIG REQUIRED)
 find_package(glfw3 CONFIG REQUIRED)
 find_package(GLEW REQUIRED)
+find_package(glad CONFIG REQUIRED)
 # 
 include_directories(src/imgui)
 include_directories(src/imgui/backends)
@@ -14,8 +15,8 @@ include_directories(src/imgui/backends)
 file(GLOB SRC_FILES 
     "src/*.cpp"
     "src/imgui/*.cpp"
-    "src/imgui/imgui_impl_opengl3.cpp"
-    "src/imgui/imgui_impl_glfw.cpp"
+    "src/imgui/backends/imgui_impl_opengl3.cpp"
+    "src/imgui/backends/imgui_impl_glfw.cpp"
 )
 # 设置所有可执行文件的输出目录（相对路径，相对于构建目录；也可写绝对路径）
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/bin)
@@ -35,6 +36,7 @@ target_link_libraries(${PROJECT_NAME}
     # "${TORCH_LIBRARIES}"
     $<IF:$<TARGET_EXISTS:mgl>,mgl,mgl-static>
     # imgui::imgui
+    glad::glad
     glfw
     GLEW::GLEW
 )

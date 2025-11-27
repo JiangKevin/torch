@@ -1,121 +1,120 @@
-// // demo_3d.cpp
-// #include <mgl2/mgl.h>
-
-// //
-// int main()
-// {
-//     mglGraph gr;
-//     gr.SetSize( 1400, 900 );
-//     gr.Title( "Surface: $z=\\sin(x)\\,\\cos(y)$" );
-
-//     // 设置 3D 范围
-//     gr.SetRanges( -M_PI, M_PI, -M_PI, M_PI, -1.2, 1.2 );
-//     gr.Axis();
-//     gr.Box();  // 3D 边框
-
-//     // 生成网格数据
-//     const int NX = 100, NY = 100;
-//     mglData   xs( NX ), ys( NY ), zs( NX, NY );
-//     for ( int i = 0; i < NX; ++i )
-//         xs.a[ i ] = -M_PI + ( 2.0 * M_PI ) * i / ( NX - 1 );
-//     for ( int j = 0; j < NY; ++j )
-//         ys.a[ j ] = -M_PI + ( 2.0 * M_PI ) * j / ( NY - 1 );
-//     for ( int i = 0; i < NX; ++i )
-//         for ( int j = 0; j < NY; ++j )
-//             zs.a[ i + NX * j ] = sin( xs.a[ i ] ) * cos( ys.a[ j ] );
-
-//     // 伪彩色映射与曲面
-//     gr.Light( true );       // 光照
-//     gr.SetQuality( 3 );     // 提升曲面质量
-//     gr.Surf( xs, ys, zs );  // 绘制曲面
-//     gr.Cont( zs, "k" );     // 等值线
-//     gr.Colorbar( "" );      // 色带
-
-//     // 视角
-//     gr.Rotate( 50, 30 );  // 旋转视角（俯仰/方位）
-
-//     // 公式标签
-//     gr.Label( 'x', "$x$", 0 );
-//     gr.Label( 'y', "$y$", 0 );
-//     gr.Label( 'z', "$z$", 0 );
-
-//     gr.WritePNG( "surface_3d.png" );
-//     return 0;
-// }
-
-#include <GL/glew.h>
+// Compile with: GLFW, OpenGL3, Dear ImGui backends, MathGL 8.0.3
+#include <glad/glad.h>
 #include <GLFW/glfw3.h>
-#include <imgui.h>
-#include <imgui_impl_glfw.h>
-#include <imgui_impl_opengl3.h>
-// #include <mgl2/mgl_gl.h>  // MathGL OpenGL 渲染头文件
+#include "imgui.h"
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_opengl3.h"
+
+// MathGL
 #include <mgl2/mgl.h>
 
-// 初始化 MathGL OpenGL 渲染上下文
-void init_mgl_gl( mglGL& gr, int width, int height )
-{
-    gr.SetSize( width, height );
-    gr.SetOrigin( 0, 0 );
-    gr.SetRanges( -5, 5, -1, 5 );
-    // 绑定 MathGL 到当前 OpenGL 上下文
-    gr.InitGL();
-}
+#include <vector>
+#include <stdexcept>
 
-// 实时绘制（随参数变化）
-void draw_mgl_gl( mglGL& gr, float param )
+static GLuint createOrUpdateTexture(GLuint tex, int w, int h, const unsigned char* rgb)
 {
-    gr.Clear();  // 清空画布
-    // 绘制带参数的函数：ReLU(x) * param
-    gr.FPlot( Form( "max(0,x)*%g", param ), "r-" );
-    gr.Text( -3, 4, Form( "$\\text{ReLU}(x) \\times %.1f$", param ), 0 );
-    gr.Axis();
-    gr.Grid();
-    gr.FinishGL();  // 完成 OpenGL 渲染
+    if (tex == 0) {
+        glGenTextures(1, &tex);
+        glBindTexture(GL_TEXTURE_2D, tex);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        // initial upload
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, w, h, 0, GL_RGB, GL_UNSIGNED_BYTE, rgb);
+    } else {
+        glBindTexture(GL_TEXTURE_2D, tex);
+        // update content
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_RGB, GL_UNSIGNED_BYTE, rgb);
+    }
+    glBindTexture(GL_TEXTURE_2D, 0);
+    return tex;
 }
 
 int main()
 {
-    // （省略 GLFW/ImGui 初始化代码，同方法1）
+    // Init GLFW
+    if (!glfwInit()) return -1;
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    GLFWwindow* window = glfwCreateWindow(1280, 720, "MathGL + ImGui", nullptr, nullptr);
+    if (!window) return -1;
+    glfwMakeContextCurrent(window);
+    glfwSwapInterval(1);
 
-    // --------------------------
-    // 步骤 3：初始化 MathGL OpenGL 渲染
-    // --------------------------
-    int   plot_width = 600, plot_height = 400;
-    mglGL gr;  // MathGL OpenGL 绘图上下文
-    init_mgl_gl( gr, plot_width, plot_height );
+    // Init GL loader
+    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) return -1;
 
-    // 交互参数：控制函数缩放
-    float relu_param = 1.0f;
+    // Init ImGui
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO(); (void)io;
+    ImGui::StyleColorsDark();
+    ImGui_ImplGlfw_InitForOpenGL(window, true);
+    ImGui_ImplOpenGL3_Init("#version 330");
 
-    // --------------------------
-    // 主循环
-    // --------------------------
-    while ( ! glfwWindowShouldClose( window ) )
-    {
+    // Prepare MathGL graph (software)
+    const int W = 800, H = 500;
+    mglGraph gr(0, W, H); // kind=0: no OpenGL canvas; software buffer only
+    // Prepare data
+    mglData y(100);
+    for (int i=0; i<y.GetNN(); ++i) {
+        double x = (double)i / (y.GetNN()-1);
+        y.a[i] = sin(3.141592653589793 * (2*x - 1)); // similar to samples
+    }
+    // Draw once (you can redraw per frame if interactive)
+    gr.SetOrigin(0,0,0);
+    gr.Axis();
+    gr.Box();
+    gr.Plot(y, "o!rgb"); // markers + per-point color palette (see sample docs)
+    // Now we have RGB buffer
+    int imgW = gr.GetWidth();
+    int imgH = gr.GetHeight();
+    const unsigned char* rgbPtr = gr.GetRGB(); // 8-bit RGB interleaved
+
+    // Upload to GL texture
+    GLuint tex = 0;
+    tex = createOrUpdateTexture(tex, imgW, imgH, rgbPtr);
+
+    // Main loop
+    while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
+        // Optionally: re-render MathGL content per frame if data changes
+        // gr.Clf(); ... draw again ... rgbPtr = gr.GetRGB(); tex = createOrUpdateTexture(tex, imgW, imgH, rgbPtr);
+
+        // ImGui frame
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        // ImGui 窗口
-        ImGui::Begin( "MathGL + ImGui (OpenGL)" );
-
-        // 交互控件：调整函数缩放参数
-        ImGui::SliderFloat( "ReLU 缩放系数", &relu_param, 0.1f, 2.0f );
-
-        // 实时绘制 MathGL 图形（OpenGL 直接渲染到纹理）
-        draw_mgl_gl( gr, relu_param );
-
-        // 显示 MathGL 渲染结果（ImGui 绘制 OpenGL 纹理）
-        ImGui::Image( ( void* )( intptr_t )gr.GetTex(), ImVec2( plot_width, plot_height ) );
-
+        ImGui::Begin("MathGL Plot");
+        ImVec2 avail = ImGui::GetContentRegionAvail();
+        // Keep aspect
+        float aspect = (float)imgW / (float)imgH;
+        ImVec2 size = avail;
+        if (size.x / size.y > aspect) size.x = size.y * aspect;
+        else size.y = size.x / aspect;
+        ImGui::Image((ImTextureID)(intptr_t)tex, size);
+        // optional controls here...
         ImGui::End();
 
-        // （省略 ImGui 渲染/缓冲区交换代码，同方法1）
+        // render
+        ImGui::Render();
+        int display_w, display_h;
+        glfwGetFramebufferSize(window, &display_w, &display_h);
+        glViewport(0, 0, display_w, display_h);
+        glClearColor(0.05f, 0.05f, 0.08f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        glfwSwapBuffers(window);
     }
 
-    // 资源清理
-    gr.ReleaseGL();  // 释放 MathGL OpenGL 资源
-    // （省略其他清理代码）
+    // Cleanup
+    glDeleteTextures(1, &tex);
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
+    glfwDestroyWindow(window);
+    glfwTerminate();
     return 0;
 }
