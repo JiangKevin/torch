@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.0 FATAL_ERROR)
 project(demo)
-
+# 
+# set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/lib/mathgl-8.0.3/lib/cmake/mathgl2)
 # 需要找到Libtorch
 # find_package(Torch REQUIRED)
 find_package(MathGL2 CONFIG REQUIRED)
